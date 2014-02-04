@@ -133,8 +133,7 @@ shell.on("render", function(dt) {
     var local = players[i]
     var remote = players[i^1]
     var tl = local.localTick()
-    var tr = tl - (local.lag + 1.25 * remote.lag) / tickRate
-    var ts = tl - local.lag / tickRate
+    var tr = tl - 2.0 * remote.lag / tickRate
     if(latencyFilter[i] === "Conservative") {
       renderState(playerCanvases[i], players[i], function(x, y) {
         return tr
@@ -143,13 +142,13 @@ shell.on("render", function(dt) {
       var remoteP = local.state.getParticle(remote.character, tr)
       if(latencyFilter[i] !== "Aggressive" && remoteP) {
         var remoteX = remoteP.x
-        var c = Math.max(shootSpeed, moveSpeed)
+        var localX = local.state.getParticle(local.character, tl).x
+        var c = 2 * Math.max(shootSpeed, moveSpeed)
         renderState(playerCanvases[i], players[i], function(x, y) {
-          var dx = remoteX[0] - x
-          var dy = remoteX[1] - y
-          var dr = Math.sqrt(dx * dx + dy * dy) / c
-          var tf = Math.min(dr + tr, tl)
-          return tf
+          var dx = x - remoteX[0]
+          var dy = y - remoteX[1]
+          var d = Math.sqrt(dx * dx + dy * dy) / c
+          return Math.min(tr + d - 1, tl)
         })
       } else {
         renderState(playerCanvases[i], players[i], function(x, y) {
