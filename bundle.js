@@ -134,7 +134,7 @@ shell.on("render", function(dt) {
     var local = players[i]
     var remote = players[i^1]
     var tl = local.localTick()
-    var tr = tl - (local.lag + 2 * remote.lag) / tickRate
+    var tr = tl - (local.lag + 1.25 * remote.lag) / tickRate
     var ts = tl - local.lag / tickRate
     if(latencyFilter[i] === "Conservative") {
       renderState(playerCanvases[i], players[i], function(x, y) {
@@ -148,7 +148,7 @@ shell.on("render", function(dt) {
         renderState(playerCanvases[i], players[i], function(x, y) {
           var dx = remoteX[0] - x
           var dy = remoteX[1] - y
-          var dr = 0.5 * Math.sqrt(dx * dx + dy * dy) / c
+          var dr = Math.sqrt(dx * dx + dy * dy) / c
           var tf = Math.min(dr + tr, tl)
           return tf
         })
@@ -596,87 +596,7 @@ if(window.performance.now) {
 } else {
   module.exports = function() { return (new Date()).getTime() }
 }
-},{}],5:[function(require,module,exports){
-"use strict"
-
-module.exports = Client
-
-var StateTrajectories = require("./trajectories.js")
-
-function Client(tickCount, tickRate, outChannel, inChannel) {
-  this.lag = inChannel.lag
-  this.tickCount = tickCount
-  this.lastRemoteTick = Date.now()
-  this.tickRate = tickRate
-  this.state = new StateTrajectories()
-  this.events = inChannel.events
-  this.channel = outChannel
-  this.inputChannel = inChannel
-  this.state.listen(this.events)
-  this.character = 0
-  this.lastVelocity = [1, 0]
-
-  var cl = this
-  this.events.on("tick", function(t) {
-    cl.tickCount = t
-    cl.lastRemoteTick = Date.now()
-  })
-}
-
-var proto = Client.prototype
-
-proto.setLag = function(lag) {
-  this.lag = this.inputChannel.lag = this.channel.lag = lag
-}
-
-proto.localTick = function() {
-  var d = Date.now() - this.lastRemoteTick
-  return this.tickCount + d / this.tickRate
-}
-
-proto.createCharacter = function(x) {
-  var t = this.localTick()
-  var id = this.state.createParticle(null, x, [0,0], t)
-  this.channel.send("create", id, x, [0,0], t)
-  this.character = id
-}
-
-proto.setVelocity = function(v) {
-  var t = this.localTick()
-  var s = this.state.getParticle(this.character, t)
-
-  //only update velocity if necessary
-  var dx = v[0] - s.v[0]
-  var dy = v[1] - s.v[1]
-  if(dx * dx + dy * dy < 1e-6) {
-    return
-  }
-
-  //Set new velocity
-  var x = s.x
-  this.state.moveParticle(this.character, x, v, t)
-  this.channel.send("move", this.character, x, v, t)
-  if(v[0] * v[0] + v[1] * v[1] > 1e-6) {
-    this.lastVelocity = v.slice()
-  }
-}
-
-proto.shoot = function(vel) {
-  var t = this.localTick()
-  var v = [this.lastVelocity[0], this.lastVelocity[1]]
-  var vl = v[0] * v[0] + v[1] * v[1]
-  if(vl < 1e-6) {
-    v = [vel, 0]
-  } else {
-    vl = vel / Math.sqrt(vl)
-    v = [v[0] * vl, v[1] * vl]
-  }
-  var x = this.state.getParticle(this.character, t).x
-  var id = this.state.createParticle(null, x, v, t)
-  this.channel.send("create", id, x, v, t)
-  return id
-}
-},{"./trajectories.js":6}],13:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 var events = require('events');
 
 exports.isArray = isArray;
@@ -1029,7 +949,87 @@ exports.format = function(f) {
   return str;
 };
 
-},{"events":8}],4:[function(require,module,exports){
+},{"events":8}],5:[function(require,module,exports){
+"use strict"
+
+module.exports = Client
+
+var StateTrajectories = require("./trajectories.js")
+
+function Client(tickCount, tickRate, outChannel, inChannel) {
+  this.lag = inChannel.lag
+  this.tickCount = tickCount
+  this.lastRemoteTick = Date.now()
+  this.tickRate = tickRate
+  this.state = new StateTrajectories()
+  this.events = inChannel.events
+  this.channel = outChannel
+  this.inputChannel = inChannel
+  this.state.listen(this.events)
+  this.character = 0
+  this.lastVelocity = [1, 0]
+
+  var cl = this
+  this.events.on("tick", function(t) {
+    cl.tickCount = t
+    cl.lastRemoteTick = Date.now()
+  })
+}
+
+var proto = Client.prototype
+
+proto.setLag = function(lag) {
+  this.lag = this.inputChannel.lag = this.channel.lag = lag
+}
+
+proto.localTick = function() {
+  var d = Date.now() - this.lastRemoteTick
+  return this.tickCount + d / this.tickRate
+}
+
+proto.createCharacter = function(x) {
+  var t = this.localTick()
+  var id = this.state.createParticle(null, x, [0,0], t)
+  this.channel.send("create", id, x, [0,0], t)
+  this.character = id
+}
+
+proto.setVelocity = function(v) {
+  var t = this.localTick()
+  var s = this.state.getParticle(this.character, t)
+
+  //only update velocity if necessary
+  var dx = v[0] - s.v[0]
+  var dy = v[1] - s.v[1]
+  if(dx * dx + dy * dy < 1e-6) {
+    return
+  }
+
+  //Set new velocity
+  var x = s.x
+  this.state.moveParticle(this.character, x, v, t)
+  this.channel.send("move", this.character, x, v, t)
+  if(v[0] * v[0] + v[1] * v[1] > 1e-6) {
+    this.lastVelocity = v.slice()
+  }
+}
+
+proto.shoot = function(vel) {
+  var t = this.localTick()
+  var v = [this.lastVelocity[0], this.lastVelocity[1]]
+  var vl = v[0] * v[0] + v[1] * v[1]
+  if(vl < 1e-6) {
+    v = [vel, 0]
+  } else {
+    vl = vel / Math.sqrt(vl)
+    v = [v[0] * vl, v[1] * vl]
+  }
+  var x = this.state.getParticle(this.character, t).x
+  var id = this.state.createParticle(null, x, v, t)
+  this.channel.send("create", id, x, v, t)
+  return id
+}
+},{"./trajectories.js":6}],4:[function(require,module,exports){
 "use strict"
 
 var EventEmitter = require("events").EventEmitter
@@ -1734,7 +1734,7 @@ function createShell(options) {
 }
 
 module.exports = createShell
-},{"events":8,"util":13,"./lib/raf-polyfill.js":10,"./lib/mousewheel-polyfill.js":11,"./lib/hrtime-polyfill.js":12,"vkey":14,"domready":15,"invert-hash":16,"uniq":17,"lower-bound":18,"iota-array":19}],3:[function(require,module,exports){
+},{"events":8,"util":13,"./lib/raf-polyfill.js":10,"./lib/mousewheel-polyfill.js":11,"./lib/hrtime-polyfill.js":12,"domready":14,"vkey":15,"invert-hash":16,"uniq":17,"lower-bound":18,"iota-array":19}],3:[function(require,module,exports){
 "use strict"
 
 module.exports = drawState
@@ -1757,6 +1757,63 @@ function drawState(context, client, lpf) {
   }
 }
 },{"hash-int":20,"pad":21}],14:[function(require,module,exports){
+/*!
+  * domready (c) Dustin Diaz 2012 - License MIT
+  */
+!function (name, definition) {
+  if (typeof module != 'undefined') module.exports = definition()
+  else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
+  else this[name] = definition()
+}('domready', function (ready) {
+
+  var fns = [], fn, f = false
+    , doc = document
+    , testEl = doc.documentElement
+    , hack = testEl.doScroll
+    , domContentLoaded = 'DOMContentLoaded'
+    , addEventListener = 'addEventListener'
+    , onreadystatechange = 'onreadystatechange'
+    , readyState = 'readyState'
+    , loadedRgx = hack ? /^loaded|^c/ : /^loaded|c/
+    , loaded = loadedRgx.test(doc[readyState])
+
+  function flush(f) {
+    loaded = 1
+    while (f = fns.shift()) f()
+  }
+
+  doc[addEventListener] && doc[addEventListener](domContentLoaded, fn = function () {
+    doc.removeEventListener(domContentLoaded, fn, f)
+    flush()
+  }, f)
+
+
+  hack && doc.attachEvent(onreadystatechange, fn = function () {
+    if (/^c/.test(doc[readyState])) {
+      doc.detachEvent(onreadystatechange, fn)
+      flush()
+    }
+  })
+
+  return (ready = hack ?
+    function (fn) {
+      self != top ?
+        loaded ? fn() : fns.push(fn) :
+        function () {
+          try {
+            testEl.doScroll('left')
+          } catch (e) {
+            return setTimeout(function() { ready(fn) }, 50)
+          }
+          fn()
+        }()
+    } :
+    function (fn) {
+      loaded ? fn() : fns.push(fn)
+    })
+})
+
+},{}],15:[function(require,module,exports){
 (function(){var ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
   , isOSX = /OS X/.test(ua)
   , isOpera = /Opera/.test(ua)
@@ -1895,63 +1952,6 @@ for(i = 112; i < 136; ++i) {
 }
 
 })()
-},{}],15:[function(require,module,exports){
-/*!
-  * domready (c) Dustin Diaz 2012 - License MIT
-  */
-!function (name, definition) {
-  if (typeof module != 'undefined') module.exports = definition()
-  else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
-  else this[name] = definition()
-}('domready', function (ready) {
-
-  var fns = [], fn, f = false
-    , doc = document
-    , testEl = doc.documentElement
-    , hack = testEl.doScroll
-    , domContentLoaded = 'DOMContentLoaded'
-    , addEventListener = 'addEventListener'
-    , onreadystatechange = 'onreadystatechange'
-    , readyState = 'readyState'
-    , loadedRgx = hack ? /^loaded|^c/ : /^loaded|c/
-    , loaded = loadedRgx.test(doc[readyState])
-
-  function flush(f) {
-    loaded = 1
-    while (f = fns.shift()) f()
-  }
-
-  doc[addEventListener] && doc[addEventListener](domContentLoaded, fn = function () {
-    doc.removeEventListener(domContentLoaded, fn, f)
-    flush()
-  }, f)
-
-
-  hack && doc.attachEvent(onreadystatechange, fn = function () {
-    if (/^c/.test(doc[readyState])) {
-      doc.detachEvent(onreadystatechange, fn)
-      flush()
-    }
-  })
-
-  return (ready = hack ?
-    function (fn) {
-      self != top ?
-        loaded ? fn() : fns.push(fn) :
-        function () {
-          try {
-            testEl.doScroll('left')
-          } catch (e) {
-            return setTimeout(function() { ready(fn) }, 50)
-          }
-          fn()
-        }()
-    } :
-    function (fn) {
-      loaded ? fn() : fns.push(fn)
-    })
-})
-
 },{}],16:[function(require,module,exports){
 "use strict"
 
