@@ -74,7 +74,26 @@ shell.on("init", function() {
     var latencyFilter = document.getElementById(playerStr + "Filter")
     addFilterListener(latencyFilter, i)
   }
-  
+
+  var moveInput = document.getElementById("moveSpeed")
+  moveInput.addEventListener("change", function() {
+    moveSpeed = +moveInput.value
+  })
+  moveSpeed = +moveInput.value
+
+  var shootInput = document.getElementById("particleSpeed")
+  shootInput.addEventListener("change", function() {
+    shootSpeed = +shootInput.value
+  })
+  shootSpeed = +shootInput.value
+
+  var tickInput = document.getElementById("tickRate")
+  tickInput.addEventListener("change", function() {
+    server.setTickRate(tickInput.value|0)
+    tickRate = tickInput.value|0
+  })
+  server.setTickRate(tickInput.value|0)
+  tickRate = tickInput.value|0
 })
 
 //Handle inputs
@@ -114,7 +133,7 @@ shell.on("render", function(dt) {
     var local = players[i]
     var remote = players[i^1]
     var tl = local.localTick()
-    var tr = tl - (local.lag + remote.lag) / tickRate
+    var tr = tl - (local.lag + 2 * remote.lag) / tickRate
     var ts = tl - local.lag / tickRate
     if(latencyFilter[i] === "Conservative") {
       renderState(playerCanvases[i], players[i], function(x, y) {
@@ -123,19 +142,13 @@ shell.on("render", function(dt) {
     } else {
       var remoteP = local.state.getParticle(remote.character, tr)
       if(latencyFilter[i] !== "Aggressive" && remoteP) {
-        var localX = local.state.getParticle(local.character, tl).x
         var remoteX = remoteP.x
         var c = Math.max(shootSpeed, moveSpeed)
         renderState(playerCanvases[i], players[i], function(x, y) {
           var dx = remoteX[0] - x
           var dy = remoteX[1] - y
-          var dr = Math.sqrt(dx * dx + dy * dy) / c
-
-          dx = localX[0] - x
-          dy = localX[1] - y
-          var dl = Math.sqrt(dx * dx + dy * dy) / c
-
-          var tf = Math.min(dr + tr, Math.max(tl - dl, ts))
+          var dr = 0.5 * Math.sqrt(dx * dx + dy * dy) / c
+          var tf = Math.min(dr + tr, tl)
           return tf
         })
       } else {
