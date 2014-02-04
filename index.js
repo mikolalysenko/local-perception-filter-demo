@@ -8,11 +8,15 @@ var tickRate = 50
 var moveSpeed = 0.25
 var shootSpeed = 1.0
 
-var shell = createShell({ tickRate: tickRate })
+var shell = createShell({ 
+  element: "gameContainer",
+  tickRate: tickRate 
+})
 var server = createServer(tickRate)
 var players = [null, null]
 var serverCanvas = null
 var playerCanvases = [null, null]
+var latencyFilter = ["Conservative", "Conservative"]
 
 //Bind keys
 shell.bind("left-1", "A")
@@ -27,15 +31,27 @@ shell.bind("up-2", "up")
 shell.bind("down-2", "down")
 shell.bind("shoot-2", "space")
 
-function makeCanvas() {
-  var canvas = document.createElement("canvas")
-  canvas.width = 300
-  canvas.height = 300
-  shell.element.appendChild(canvas)
+function makeCanvas(element) {
+  var canvas = document.getElementById(element)
   var ctx = canvas.getContext("2d")
   ctx.translate(canvas.width/2, canvas.height/2)
   ctx.scale(canvas.width/20, canvas.height/20)
   return ctx
+}
+
+function addLagListener(lagElement, player) {
+  player.setLag(lagElement.value|0)
+  lagElement.addEventListener("change", function() {
+    player.setLag(lagElement.value|0)
+  })
+}
+
+function addFilterListener(filterElement, player) {
+  function updateFilter() {
+    latencyFilter[player] = filterElement.value
+  }
+  filterElement.addEventListener("change", updateFilter)
+  updateFilter()
 }
 
 shell.on("init", function() {
@@ -47,9 +63,18 @@ shell.on("init", function() {
   players[1].lastVelocity = [-1, 0]
 
   //Create canvases for players and server
-  serverCanvas = makeCanvas()
-  playerCanvases[0] = makeCanvas()
-  playerCanvases[1] = makeCanvas()
+  serverCanvas = makeCanvas("serverCanvas")
+  
+  //Attach listeners for players
+  for(var i=0; i<2; ++i) {
+    var playerStr = "player" + (i+1)
+    playerCanvases[i] = makeCanvas(playerStr + "Canvas")
+    var lagTime = document.getElementById(playerStr + "Lag")
+    addLagListener(lagTime, players[i])
+    var latencyFilter = document.getElementById(playerStr + "Filter")
+    addFilterListener(latencyFilter, i)
+  }
+  
 })
 
 //Handle inputs
@@ -85,10 +110,39 @@ shell.on("render", function(dt) {
   renderState(serverCanvas, server, function(x, y) {
     return server.tickCount
   })
-  renderState(playerCanvases[0], players[0], function(x, y) {
-    return players[0].localTick()
-  })
-  renderState(playerCanvases[1], players[1], function(x, y) {
-    return players[1].localTick()
-  })
+  for(var i=0; i<2; ++i) {
+    var local = players[i]
+    var remote = players[i^1]
+    var tl = local.localTick()
+    var tr = tl - (local.lag + remote.lag) / tickRate
+    var ts = tl - local.lag / tickRate
+    if(latencyFilter[i] === "Conservative") {
+      renderState(playerCanvases[i], players[i], function(x, y) {
+        return tr
+      })
+    } else {
+      var remoteP = local.state.getParticle(remote.character, tr)
+      if(latencyFilter[i] !== "Aggressive" && remoteP) {
+        var localX = local.state.getParticle(local.character, tl).x
+        var remoteX = remoteP.x
+        var c = Math.max(shootSpeed, moveSpeed)
+        renderState(playerCanvases[i], players[i], function(x, y) {
+          var dx = remoteX[0] - x
+          var dy = remoteX[1] - y
+          var dr = Math.sqrt(dx * dx + dy * dy) / c
+
+          dx = localX[0] - x
+          dy = localX[1] - y
+          var dl = Math.sqrt(dx * dx + dy * dy) / c
+
+          var tf = Math.min(dr + tr, Math.max(tl - dl, ts))
+          return tf
+        })
+      } else {
+        renderState(playerCanvases[i], players[i], function(x, y) {
+          return tl
+        })
+      }
+    }
+  }
 })

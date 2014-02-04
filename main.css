@@ -1,0 +1,24 @@
+body {
+  font-family: sans-serif;
+}
+#gameContainer {
+  width: 100%;
+}
+.serverContainer {
+  display: block;
+  float: left;
+  width: 33%;
+}
+.playerContainer {
+  display: block;
+  float: left;
+  width: 33%;
+}
+#controlPanel {
+  width: 100%;
+}
+.parametersContainer {
+  display: block;
+  float: left;
+  width: 33%;
+}

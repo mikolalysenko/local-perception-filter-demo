@@ -1,0 +1,89 @@
+<html lang="en-us">
+<head>
+  <title>Local perception filter demo</title>
+  <link rel="stylesheet" type="text/css" charset="UTF-8" href="main.css">
+</head>
+<body>
+  <div id="gameContainer">
+    <div class="serverContainer">
+      <h3>Server:</h3>
+      <canvas id="serverCanvas" class="serverCanvas" width=300 height=300></canvas>
+    </div>
+    <div class="playerContainer">
+      <h3>Player 1:</h3>
+      <canvas id="player1Canvas" class="playerCanvas" width=300 height=300></canvas>
+    </div>
+    <div class="playerContainer">
+      <h3>Player 2:</h3>
+      <canvas id="player2Canvas" class="playerCanvas" width=300 height=300></canvas>
+    </div>
+  </div>
+
+  <div id="controlPanel">
+    <div class="parametersContainer">
+      <p>
+        <label for="moveSpeed">Movement speed (m/tick):</label>
+        <input type="number" id="moveSpeed" value="0.25">
+      </p>
+      <p>
+        <label for="particleSpeed">Particle speed (m/tick):</label>
+        <input type="number" id="particleSpeed" value="1">
+      </p>
+      <p>
+        <label for="tickRate">Tick rate (ticks/ms):</label>
+        <input type="number" id="tickRate" value="50">
+      </p>
+    </div>
+
+    <div class="parametersContainer">
+      <p>
+        <label for="player1Lag">Ping (ms):</label>
+        <input type="number" id="player1Lag" value="100">
+      </p>
+      <p>
+        <label for="player1Filter">Latency filter:</label>
+        <select id="player1Filter">
+          <option>Conservative</option>
+          <option>Aggressive</option>
+          <option>Local perception filter</option>
+        </select>
+      </p>
+      <p>Keys:
+        <ul>
+          <li>A - Move left</li>
+          <li>D - Move right</li>
+          <li>S - Move down</li>
+          <li>W - Move up</li>
+          <li>Q - Emit particle</li>
+        </ul>
+      </p>
+    </div>
+
+    <div class="parametersContainer">
+      <p>
+        <label for="player2Lag">Ping (ms):</label>
+        <input type="number" id="player2Lag" value="100">
+      </p>
+      <p>
+        <label for="player2Filter">Latency filter:</label>
+        <select id="player2Filter">
+          <option>Conservative</option>
+          <option>Aggressive</option>
+          <option>Local perception filter</option>
+        </select>
+      </p>
+      <p>Keys:
+        <ul>
+          <li>Left arrow - Move left</li>
+          <li>Right arrow - Move right</li>
+          <li>Down arrow - Move down</li>
+          <li>Up arrow - Move up</li>
+          <li>Spacebar - Emit particle</li>
+        </ul>
+      </p>
+    </div>
+  </div>
+
+  <script src="bundle.js" type="text/javascript"></script>
+</body>
+</html>
