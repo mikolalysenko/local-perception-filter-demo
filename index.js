@@ -133,7 +133,7 @@ shell.on("render", function(dt) {
     var local = players[i]
     var remote = players[i^1]
     var tl = local.localTick()
-    var tr = tl - (local.lag + 2 * remote.lag) / tickRate
+    var tr = tl - (local.lag + 1.25 * remote.lag) / tickRate
     var ts = tl - local.lag / tickRate
     if(latencyFilter[i] === "Conservative") {
       renderState(playerCanvases[i], players[i], function(x, y) {
@@ -147,7 +147,7 @@ shell.on("render", function(dt) {
         renderState(playerCanvases[i], players[i], function(x, y) {
           var dx = remoteX[0] - x
           var dy = remoteX[1] - y
-          var dr = 0.5 * Math.sqrt(dx * dx + dy * dy) / c
+          var dr = Math.sqrt(dx * dx + dy * dy) / c
           var tf = Math.min(dr + tr, tl)
           return tf
         })
