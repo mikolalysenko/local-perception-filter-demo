@@ -62,6 +62,10 @@ shell.on("init", function() {
   players[0].lastVelocity = [ 1, 0]
   players[1].lastVelocity = [-1, 0]
 
+  //Fix up input stuff
+  document.body.style.overflow = ""
+  document.body.style.height = ""
+
   //Create canvases for players and server
   serverCanvas = makeCanvas("serverCanvas")
   
