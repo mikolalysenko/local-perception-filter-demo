@@ -34,8 +34,17 @@
         <input type="number" id="particleSpeed" value="1" min="0.001">
       </p>
       <p>
-        <label for="tickRate">Tick rate (ticks/ms):</label>
+        <label for="tickRate">Tick rate (ms/tick):</label>
         <input type="number" id="tickRate" value="50" min="0">
+      </p>
+      <p>
+        This demonstrates the local perception filter algorithm for hiding latency in network based multiplayer games.  The filtering options are:
+
+        <ul>
+          <li>Conservative: Wait until all inputs collected before drawing</li>
+          <li>Aggressive: Draw as soon as local input pressed</li>
+          <li>Local perception filter: Warp time depending on distance to remote player</li>
+        </ul>
       </p>
     </div>
 
@@ -52,7 +61,7 @@
           <option>Local perception filter</option>
         </select>
       </p>
-      <p>Keys:
+      <p>Player 1 keys:
         <ul>
           <li>A - Move left</li>
           <li>D - Move right</li>
@@ -76,7 +85,7 @@
           <option>Local perception filter</option>
         </select>
       </p>
-      <p>Keys:
+      <p>Player 2 keys:
         <ul>
           <li>Left arrow - Move left</li>
           <li>Right arrow - Move right</li>
