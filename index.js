@@ -16,7 +16,9 @@ var server = createServer(tickRate)
 var players = [null, null]
 var serverCanvas = null
 var playerCanvases = [null, null]
-var latencyFilter = ["Conservative", "Conservative"]
+var latencyFilter = ["Strict", "Strict"]
+
+var useGL = true
 
 //Bind keys
 shell.bind("left-1", "A")
@@ -55,6 +57,7 @@ function addFilterListener(filterElement, player) {
 }
 
 shell.on("init", function() {
+  shell.element.tabindex = 1
   players = [
     server.createClient(100, [-1, 0]),
     server.createClient(100, [ 1, 0])
@@ -138,13 +141,13 @@ shell.on("render", function(dt) {
     var remote = players[i^1]
     var tl = local.localTick()
     var tr = tl - 2.0 * remote.lag / tickRate
-    if(latencyFilter[i] === "Conservative") {
+    if(latencyFilter[i] === "Strict") {
       renderState(playerCanvases[i], players[i], function(x, y) {
         return tr
       })
     } else {
       var remoteP = local.state.getParticle(remote.character, tr)
-      if(latencyFilter[i] !== "Aggressive" && remoteP) {
+      if(latencyFilter[i] !== "Optimistic" && remoteP) {
         var remoteX = remoteP.x
         var localX = local.state.getParticle(local.character, tl).x
         var c = 2 * Math.max(shootSpeed, moveSpeed)

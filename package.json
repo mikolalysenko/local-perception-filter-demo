@@ -6,7 +6,7 @@
   "dependencies": {
     "hash-int": "^0.0.0",
     "pad": "^0.0.4",
-    "binary-search-bounds": "^0.3.1",
+    "binary-search-bounds": "~0.3.1",
     "game-shell": "^0.1.4",
     "cubic-hermite": "^0.0.0"
   },

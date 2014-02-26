@@ -41,8 +41,8 @@
         This demonstrates the local perception filter algorithm for hiding latency in network based multiplayer games.  The filtering options are:
 
         <ul>
-          <li>Conservative: Wait until all inputs collected before drawing</li>
-          <li>Aggressive: Draw as soon as local input pressed</li>
+          <li>Strict: Wait until all inputs collected before drawing</li>
+          <li>Optimistic: Draw as soon as local input pressed</li>
           <li>Local perception filter: Warp time depending on distance to remote player</li>
         </ul>
       </p>
@@ -56,8 +56,8 @@
       <p>
         <label for="player1Filter">Latency filter:</label>
         <select id="player1Filter">
-          <option>Conservative</option>
-          <option>Aggressive</option>
+          <option>Strict</option>
+          <option>Optimistic</option>
           <option>Local perception filter</option>
         </select>
       </p>
@@ -80,8 +80,8 @@
       <p>
         <label for="player2Filter">Latency filter:</label>
         <select id="player2Filter">
-          <option>Conservative</option>
-          <option>Aggressive</option>
+          <option>Strict</option>
+          <option>Optimistic</option>
           <option>Local perception filter</option>
         </select>
       </p>
