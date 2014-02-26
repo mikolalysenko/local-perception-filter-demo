@@ -17,7 +17,9 @@ var server = createServer(tickRate)
 var players = [null, null]
 var serverCanvas = null
 var playerCanvases = [null, null]
-var latencyFilter = ["Conservative", "Conservative"]
+var latencyFilter = ["Strict", "Strict"]
+
+var useGL = true
 
 //Bind keys
 shell.bind("left-1", "A")
@@ -56,6 +58,7 @@ function addFilterListener(filterElement, player) {
 }
 
 shell.on("init", function() {
+  shell.element.tabindex = 1
   players = [
     server.createClient(100, [-1, 0]),
     server.createClient(100, [ 1, 0])
@@ -139,13 +142,13 @@ shell.on("render", function(dt) {
     var remote = players[i^1]
     var tl = local.localTick()
     var tr = tl - 2.0 * remote.lag / tickRate
-    if(latencyFilter[i] === "Conservative") {
+    if(latencyFilter[i] === "Strict") {
       renderState(playerCanvases[i], players[i], function(x, y) {
         return tr
       })
     } else {
       var remoteP = local.state.getParticle(remote.character, tr)
-      if(latencyFilter[i] !== "Aggressive" && remoteP) {
+      if(latencyFilter[i] !== "Optimistic" && remoteP) {
         var remoteX = remoteP.x
         var localX = local.state.getParticle(local.character, tl).x
         var c = 2 * Math.max(shootSpeed, moveSpeed)
@@ -590,96 +593,18 @@ module.exports = function( elem, callback, useCapture ) {
   }
 };
 },{}],12:[function(require,module,exports){
-if(window.performance.now) {
-  module.exports = function() { return window.performance.now() }
-} else if(window.performance.webktiNow) {
-  module.exports = function() { return window.performance.webkitNow() }
+if(typeof window.performance === "object") {
+  if(window.performance.now) {
+    module.exports = function() { return window.performance.now() }
+  } else if(window.performance.webktiNow) {
+    module.exports = function() { return window.performance.webkitNow() }
+  }
 } else if(Date.now) {
   module.exports = Date.now
 } else {
   module.exports = function() { return (new Date()).getTime() }
 }
-},{}],5:[function(require,module,exports){
-"use strict"
-
-module.exports = Client
-
-var StateTrajectories = require("./trajectories.js")
-
-function Client(tickCount, tickRate, outChannel, inChannel) {
-  this.lag = inChannel.lag
-  this.tickCount = tickCount
-  this.lastRemoteTick = Date.now()
-  this.tickRate = tickRate
-  this.state = new StateTrajectories()
-  this.events = inChannel.events
-  this.channel = outChannel
-  this.inputChannel = inChannel
-  this.state.listen(this.events)
-  this.character = 0
-  this.lastVelocity = [1, 0]
-
-  var cl = this
-  this.events.on("tick", function(t) {
-    cl.tickCount = t
-    cl.lastRemoteTick = Date.now()
-  })
-}
-
-var proto = Client.prototype
-
-proto.setLag = function(lag) {
-  this.lag = this.inputChannel.lag = this.channel.lag = lag
-}
-
-proto.localTick = function() {
-  var d = Date.now() - this.lastRemoteTick
-  return this.tickCount + d / this.tickRate
-}
-
-proto.createCharacter = function(x) {
-  var t = this.localTick()
-  var id = this.state.createParticle(null, x, [0,0], t)
-  this.channel.send("create", id, x, [0,0], t)
-  this.character = id
-}
-
-proto.setVelocity = function(v) {
-  var t = this.localTick()
-  var s = this.state.getParticle(this.character, t)
-
-  //only update velocity if necessary
-  var dx = v[0] - s.v[0]
-  var dy = v[1] - s.v[1]
-  if(dx * dx + dy * dy < 1e-6) {
-    return
-  }
-
-  //Set new velocity
-  var x = s.x
-  this.state.moveParticle(this.character, x, v, t)
-  this.channel.send("move", this.character, x, v, t)
-  if(v[0] * v[0] + v[1] * v[1] > 1e-6) {
-    this.lastVelocity = v.slice()
-  }
-}
-
-proto.shoot = function(vel) {
-  var t = this.localTick()
-  var v = [this.lastVelocity[0], this.lastVelocity[1]]
-  var vl = v[0] * v[0] + v[1] * v[1]
-  if(vl < 1e-6) {
-    v = [vel, 0]
-  } else {
-    vl = vel / Math.sqrt(vl)
-    v = [v[0] * vl, v[1] * vl]
-  }
-  var x = this.state.getParticle(this.character, t).x
-  var id = this.state.createParticle(null, x, v, t)
-  this.channel.send("create", id, x, v, t)
-  return id
-}
-},{"./trajectories.js":6}],13:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 var events = require('events');
 
 exports.isArray = isArray;
@@ -1032,7 +957,87 @@ exports.format = function(f) {
   return str;
 };
 
-},{"events":8}],4:[function(require,module,exports){
+},{"events":8}],5:[function(require,module,exports){
+"use strict"
+
+module.exports = Client
+
+var StateTrajectories = require("./trajectories.js")
+
+function Client(tickCount, tickRate, outChannel, inChannel) {
+  this.lag = inChannel.lag
+  this.tickCount = tickCount
+  this.lastRemoteTick = Date.now()
+  this.tickRate = tickRate
+  this.state = new StateTrajectories()
+  this.events = inChannel.events
+  this.channel = outChannel
+  this.inputChannel = inChannel
+  this.state.listen(this.events)
+  this.character = 0
+  this.lastVelocity = [1, 0]
+
+  var cl = this
+  this.events.on("tick", function(t) {
+    cl.tickCount = t
+    cl.lastRemoteTick = Date.now()
+  })
+}
+
+var proto = Client.prototype
+
+proto.setLag = function(lag) {
+  this.lag = this.inputChannel.lag = this.channel.lag = lag
+}
+
+proto.localTick = function() {
+  var d = Date.now() - this.lastRemoteTick
+  return this.tickCount + d / this.tickRate
+}
+
+proto.createCharacter = function(x) {
+  var t = this.localTick()
+  var id = this.state.createParticle(null, x, [0,0], t)
+  this.channel.send("create", id, x, [0,0], t)
+  this.character = id
+}
+
+proto.setVelocity = function(v) {
+  var t = this.localTick()
+  var s = this.state.getParticle(this.character, t)
+
+  //only update velocity if necessary
+  var dx = v[0] - s.v[0]
+  var dy = v[1] - s.v[1]
+  if(dx * dx + dy * dy < 1e-6) {
+    return
+  }
+
+  //Set new velocity
+  var x = s.x
+  this.state.moveParticle(this.character, x, v, t)
+  this.channel.send("move", this.character, x, v, t)
+  if(v[0] * v[0] + v[1] * v[1] > 1e-6) {
+    this.lastVelocity = v.slice()
+  }
+}
+
+proto.shoot = function(vel) {
+  var t = this.localTick()
+  var v = [this.lastVelocity[0], this.lastVelocity[1]]
+  var vl = v[0] * v[0] + v[1] * v[1]
+  if(vl < 1e-6) {
+    v = [vel, 0]
+  } else {
+    vl = vel / Math.sqrt(vl)
+    v = [v[0] * vl, v[1] * vl]
+  }
+  var x = this.state.getParticle(this.character, t).x
+  var id = this.state.createParticle(null, x, v, t)
+  this.channel.send("create", id, x, v, t)
+  return id
+}
+},{"./trajectories.js":6}],4:[function(require,module,exports){
 "use strict"
 
 var EventEmitter = require("events").EventEmitter
@@ -1041,7 +1046,7 @@ var EventEmitter = require("events").EventEmitter
   , vkey         = require("vkey")
   , invert       = require("invert-hash")
   , uniq         = require("uniq")
-  , lowerBound   = require("lower-bound")
+  , bsearch      = require("binary-search-bounds")
   , iota         = require("iota-array")
   , min          = Math.min
 
@@ -1073,11 +1078,7 @@ var keyNames = uniq(Object.keys(invert(filtered_vkey)))
 
 //Translates a virtual keycode to a normalized keycode
 function virtualKeyCode(key) {
-  var idx = lowerBound(keyNames, key)
-  if(idx < 0 || idx >= keyNames.length) {
-    return -1
-  }
-  return idx
+  return bsearch.eq(keyNames, key)
 }
 
 //Maps a physical keycode to a normalized keycode
@@ -1254,7 +1255,7 @@ Object.defineProperty(proto, "paused", {
         this._paused = true
         this._frameTime = min(1.0, (hrtime() - this._lastTick) / this._tickRate)
         clearInterval(this._tickInterval)
-        cancelAnimationFrame(this._rafHandle)
+        //cancelAnimationFrame(this._rafHandle)
       } else {
         this._paused = false
         this._lastTick = hrtime() - Math.floor(this._frameTime * this._tickRate)
@@ -1374,7 +1375,6 @@ Object.defineProperty(proto, "height", {
   }
 })
 
-
 //Set key state
 function setKeyState(shell, key, state) {
   var ps = shell._curKeyState[key]
@@ -1432,10 +1432,9 @@ function tick(shell) {
 
 //Render stuff
 function render(shell) {
-  //If paused, don't do anything
-  if(shell._paused) {
-    return
-  }
+
+  //Request next frame
+  shell._rafHandle = requestAnimationFrame(shell._render)
 
   //Tick the shell
   tick(shell)
@@ -1455,12 +1454,16 @@ function render(shell) {
   var t = hrtime()
   shell.frameTime = t - s
   
-  //Request next frame
-  requestAnimationFrame(shell._render)
+}
+
+function isFocused(shell) {
+  return (document.activeElement === document.body) ||
+         (document.activeElement === shell.element)
 }
 
 //Set key up
 function handleKeyUp(shell, ev) {
+  ev.preventDefault()
   var kc = physicalKeyCode(ev.keyCode || ev.char || ev.which || ev.charCode)
   if(kc >= 0) {
     setKeyState(shell, kc, false)
@@ -1469,9 +1472,18 @@ function handleKeyUp(shell, ev) {
 
 //Set key down
 function handleKeyDown(shell, ev) {
-  var kc = physicalKeyCode(ev.keyCode || ev.char || ev.which || ev.charCode)
-  if(kc >= 0) {
-    setKeyState(shell, kc, true)
+  if(!isFocused(shell)) {
+    return
+  }
+  if(ev.metaKey) {
+    //Hack: Clear key state when meta gets pressed to prevent keys sticking
+    handleBlur(shell, ev)
+  } else {
+    ev.preventDefault()
+    var kc = physicalKeyCode(ev.keyCode || ev.char || ev.which || ev.charCode)
+    if(kc >= 0) {
+      setKeyState(shell, kc, true)
+    }
   }
 }
 
@@ -1582,6 +1594,7 @@ function handleResizeElement(shell, ev) {
 
 function makeDefaultContainer() {
   var container = document.createElement("div")
+  container.tabindex = 1
   container.style.position = "absolute"
   container.style.left = "0px"
   container.style.right = "0px"
@@ -1590,6 +1603,8 @@ function makeDefaultContainer() {
   container.style.height = "100%"
   container.style.overflow = "hidden"
   document.body.appendChild(container)
+  document.body.style.overflow = "hidden" //Prevent bounce
+  document.body.style.height = "100%"
   return container
 }
 
@@ -1666,35 +1681,37 @@ function createShell(options) {
     window.addEventListener("resize", handleResize, false)
     
     //Hook keyboard listener
-    window.addEventListener("keydown", handleKeyDown.bind(undefined, shell), true)
-    window.addEventListener("keyup", handleKeyUp.bind(undefined, shell), true)
-
+    window.addEventListener("keydown", handleKeyDown.bind(undefined, shell), false)
+    window.addEventListener("keyup", handleKeyUp.bind(undefined, shell), false)
+    
     //Disable right click
     shell.element.oncontextmenu = handleContexMenu.bind(undefined, shell)
     
     //Hook mouse listeners
-    shell.element.onmousedown = handleMouseDown.bind(undefined, shell)
-    shell.element.onmouseup = handleMouseUp.bind(undefined, shell)
-    shell.element.onmousemove = handleMouseMove.bind(undefined, shell)
-    shell.element.onmouseenter = handleMouseEnter.bind(undefined, shell)
+    shell.element.addEventListener("mousedown", handleMouseDown.bind(undefined, shell), false)
+    shell.element.addEventListener("mouseup", handleMouseUp.bind(undefined, shell), false)
+    shell.element.addEventListener("mousemove", handleMouseMove.bind(undefined, shell), false)
+    shell.element.addEventListener("mouseenter", handleMouseEnter.bind(undefined, shell), false)
     
     //Mouse leave
     var leave = handleMouseLeave.bind(undefined, shell)
-    shell.element.onmouseleave = leave
-    shell.element.onmouseout = leave
-    window.addEventListener("mouseleave", leave, true)
-    window.addEventListener("mouseout", leave, true)
+    shell.element.addEventListener("mouseleave", leave, false)
+    shell.element.addEventListener("mouseout", leave, false)
+    window.addEventListener("mouseleave", leave, false)
+    window.addEventListener("mouseout", leave, false)
     
     //Blur event 
     var blur = handleBlur.bind(undefined, shell)
-    shell.element.onblur = blur
-    window.addEventListener("blur", blur, true)
+    shell.element.addEventListener("blur", blur, false)
+    shell.element.addEventListener("focusout", blur, false)
+    shell.element.addEventListener("focus", blur, false)
+    window.addEventListener("blur", blur, false)
+    window.addEventListener("focusout", blur, false)
+    window.addEventListener("focus", blur, false)
 
     //Mouse wheel handler
     addMouseWheel(shell.element, handleMouseWheel.bind(undefined, shell), false)
-    document.body.style.overflow = "hidden" //Prevent bounce
-    document.body.style.height = "100%"
-    
+
     //Fullscreen handler
     var fullscreenChange = handleFullscreen.bind(undefined, shell)
     document.addEventListener("fullscreenchange", fullscreenChange, false)
@@ -1702,7 +1719,7 @@ function createShell(options) {
     document.addEventListener("webkitfullscreenchange", fullscreenChange, false)
 
     //Stupid fullscreen hack
-    shell.element.addEventListener("click", tryFullscreen.bind(undefined, shell), true)
+    shell.element.addEventListener("click", tryFullscreen.bind(undefined, shell), false)
 
     //Pointer lock change handler
     var pointerLockChange = handlePointerLockChange.bind(undefined, shell)
@@ -1737,7 +1754,7 @@ function createShell(options) {
 }
 
 module.exports = createShell
-},{"events":8,"util":13,"./lib/raf-polyfill.js":10,"./lib/mousewheel-polyfill.js":11,"./lib/hrtime-polyfill.js":12,"domready":14,"vkey":15,"invert-hash":16,"uniq":17,"lower-bound":18,"iota-array":19}],3:[function(require,module,exports){
+},{"events":8,"util":13,"./lib/raf-polyfill.js":10,"./lib/mousewheel-polyfill.js":11,"./lib/hrtime-polyfill.js":12,"domready":14,"vkey":15,"invert-hash":16,"iota-array":17,"uniq":18,"binary-search-bounds":19}],3:[function(require,module,exports){
 "use strict"
 
 module.exports = drawState
@@ -1759,31 +1776,7 @@ function drawState(context, client, lpf) {
     context.fill()
   }
 }
-},{"hash-int":20,"pad":21}],20:[function(require,module,exports){
-"use strict"
-
-var A
-if(typeof Uint32Array === undefined) {
-  A = [ 0 ]
-} else {
-  A = new Uint32Array(1)
-}
-
-function hashInt(x) {
-  A[0]  = x|0
-  A[0] -= (A[0]<<6)
-  A[0] ^= (A[0]>>>17)
-  A[0] -= (A[0]<<9)
-  A[0] ^= (A[0]<<4)
-  A[0] -= (A[0]<<3)
-  A[0] ^= (A[0]<<10)
-  A[0] ^= (A[0]>>>15)
-  return A[0]
-}
-
-module.exports = hashInt
-
-},{}],14:[function(require,module,exports){
+},{"hash-int":20,"pad":21}],14:[function(require,module,exports){
 /*!
   * domready (c) Dustin Diaz 2012 - License MIT
   */
@@ -1801,8 +1794,7 @@ module.exports = hashInt
     , addEventListener = 'addEventListener'
     , onreadystatechange = 'onreadystatechange'
     , readyState = 'readyState'
-    , loadedRgx = hack ? /^loaded|^c/ : /^loaded|c/
-    , loaded = loadedRgx.test(doc[readyState])
+    , loaded = /^loade|c/.test(doc[readyState])
 
   function flush(f) {
     loaded = 1
@@ -1839,7 +1831,6 @@ module.exports = hashInt
       loaded ? fn() : fns.push(fn)
     })
 })
-
 },{}],15:[function(require,module,exports){
 (function(){var ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
   , isOSX = /OS X/.test(ua)
@@ -1969,7 +1960,7 @@ for(i = 65; i < 91; ++i) {
 }
 
 // num0-9
-for(i = 96; i < 106; ++i) {
+for(i = 96; i < 107; ++i) {
   output[i] = '<num-'+(i - 96)+'>'
 }
 
@@ -1994,6 +1985,18 @@ function invert(hash) {
 
 module.exports = invert
 },{}],17:[function(require,module,exports){
+"use strict"
+
+function iota(n) {
+  var result = new Array(n)
+  for(var i=0; i<n; ++i) {
+    result[i] = i
+  }
+  return result
+}
+
+module.exports = iota
+},{}],18:[function(require,module,exports){
 "use strict"
 
 function unique_pred(list, compare) {
@@ -2051,76 +2054,92 @@ function unique(list, compare, sorted) {
 }
 
 module.exports = unique
-},{}],18:[function(require,module,exports){
-"use strict"
-
-function lowerBound_cmp(array, value, compare, lo, hi) {
-  lo = lo|0
-  hi = hi|0
-  while(lo < hi) {
-    var m = (lo + hi) >>> 1
-      , v = compare(value, array[m])
-    if(v < 0) {
-      hi = m-1
-    } else if(v > 0) {
-      lo = m+1
-    } else {
-      hi = m
-    }
-  }
-  if(compare(array[lo], value) <= 0) {
-    return lo
-  }
-  return lo - 1
-}
-
-function lowerBound_def(array, value, lo, hi) {
-  lo = lo|0
-  hi = hi|0
-  while(lo < hi) {
-    var m = (lo + hi) >>> 1
-    if(value < array[m]) {
-      hi = m-1
-    } else if(value > array[m]) {
-      lo = m+1
-    } else {
-      hi = m
-    }
-  }
-  if(array[lo] <= value) {
-    return lo
-  }
-  return lo - 1
-}
-
-function lowerBound(array, value, compare, lo, hi) {
-  if(!lo) {
-    lo = 0
-  }
-  if(typeof(hi) !== "number") {
-    hi = array.length-1
-  }
-  if(compare) {
-    return lowerBound_cmp(array, value, compare, lo, hi)
-  }
-  return lowerBound_def(array, value, lo, hi)
-}
-
-module.exports = lowerBound
-
-
 },{}],19:[function(require,module,exports){
 "use strict"
 
-function iota(n) {
-  var result = new Array(n)
-  for(var i=0; i<n; ++i) {
-    result[i] = i
+function compileSearch(funcName, predicate, reversed, extraArgs, useNdarray, earlyOut) {
+  var code = [
+    "function ", funcName, "(a,l,h,", extraArgs.join(","),  "){",
+earlyOut ? "" : "var i=", (reversed ? "l-1" : "h+1"),
+";while(l<=h){\
+var m=(l+h)>>>1,x=a", useNdarray ? ".get(m)" : "[m]"]
+  if(earlyOut) {
+    if(predicate.indexOf("c") < 0) {
+      code.push(";if(x===y){return m}else if(x<=y){")
+    } else {
+      code.push(";var p=c(x,y);if(p===0){return m}else if(p<=0){")
+    }
+  } else {
+    code.push(";if(", predicate, "){i=m;")
   }
-  return result
+  if(reversed) {
+    code.push("l=m+1}else{h=m-1}")
+  } else {
+    code.push("h=m-1}else{l=m+1}")
+  }
+  code.push("}")
+  if(earlyOut) {
+    code.push("return -1};")
+  } else {
+    code.push("return i};")
+  }
+  return code.join("")
 }
 
-module.exports = iota
+function compileBoundsSearch(predicate, reversed, suffix, earlyOut) {
+  var result = new Function([
+  compileSearch("A", "x" + predicate + "y", reversed, ["y"], false, earlyOut),
+  compileSearch("B", "x" + predicate + "y", reversed, ["y"], true, earlyOut),
+  compileSearch("P", "c(x,y)" + predicate + "0", reversed, ["y", "c"], false, earlyOut),
+  compileSearch("Q", "c(x,y)" + predicate + "0", reversed, ["y", "c"], true, earlyOut),
+"function dispatchBsearch", suffix, "(a,y,c,l,h){\
+if(a.shape){\
+if(typeof(c)==='function'){\
+return Q(a,(l===undefined)?0:l|0,(h===undefined)?a.shape[0]-1:h|0,y,c)\
+}else{\
+return B(a,(c===undefined)?0:c|0,(l===undefined)?a.shape[0]-1:l|0,y)\
+}}else{\
+if(typeof(c)==='function'){\
+return P(a,(l===undefined)?0:l|0,(h===undefined)?a.length-1:h|0,y,c)\
+}else{\
+return A(a,(c===undefined)?0:c|0,(l===undefined)?a.length-1:l|0,y)\
+}}}\
+return dispatchBsearch", suffix].join(""))
+  return result()
+}
+
+module.exports = {
+  ge: compileBoundsSearch(">=", false, "GE"),
+  gt: compileBoundsSearch(">", false, "GT"),
+  lt: compileBoundsSearch("<", true, "LT"),
+  le: compileBoundsSearch("<=", true, "LE"),
+  eq: compileBoundsSearch("-", true, "EQ", true)
+}
+
+},{}],20:[function(require,module,exports){
+"use strict"
+
+var A
+if(typeof Uint32Array === undefined) {
+  A = [ 0 ]
+} else {
+  A = new Uint32Array(1)
+}
+
+function hashInt(x) {
+  A[0]  = x|0
+  A[0] -= (A[0]<<6)
+  A[0] ^= (A[0]>>>17)
+  A[0] -= (A[0]<<9)
+  A[0] ^= (A[0]<<4)
+  A[0] -= (A[0]<<3)
+  A[0] ^= (A[0]<<10)
+  A[0] ^= (A[0]>>>15)
+  return A[0]
+}
+
+module.exports = hashInt
+
 },{}],6:[function(require,module,exports){
 "use strict"
 
