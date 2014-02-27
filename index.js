@@ -42,9 +42,9 @@ function makeCanvas(element) {
 }
 
 function addLagListener(lagElement, player) {
-  player.setLag(lagElement.value|0)
+  player.setLag(0.5*lagElement.value|0)
   lagElement.addEventListener("change", function() {
-    player.setLag(lagElement.value|0)
+    player.setLag(0.5*lagElement.value|0)
   })
 }
 
