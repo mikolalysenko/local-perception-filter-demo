@@ -43,9 +43,9 @@ function makeCanvas(element) {
 }
 
 function addLagListener(lagElement, player) {
-  player.setLag(lagElement.value|0)
+  player.setLag(0.5*lagElement.value|0)
   lagElement.addEventListener("change", function() {
-    player.setLag(lagElement.value|0)
+    player.setLag(0.5*lagElement.value|0)
   })
 }
 
@@ -604,7 +604,87 @@ if(typeof window.performance === "object") {
 } else {
   module.exports = function() { return (new Date()).getTime() }
 }
-},{}],13:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
+"use strict"
+
+module.exports = Client
+
+var StateTrajectories = require("./trajectories.js")
+
+function Client(tickCount, tickRate, outChannel, inChannel) {
+  this.lag = inChannel.lag
+  this.tickCount = tickCount
+  this.lastRemoteTick = Date.now()
+  this.tickRate = tickRate
+  this.state = new StateTrajectories()
+  this.events = inChannel.events
+  this.channel = outChannel
+  this.inputChannel = inChannel
+  this.state.listen(this.events)
+  this.character = 0
+  this.lastVelocity = [1, 0]
+
+  var cl = this
+  this.events.on("tick", function(t) {
+    cl.tickCount = t
+    cl.lastRemoteTick = Date.now()
+  })
+}
+
+var proto = Client.prototype
+
+proto.setLag = function(lag) {
+  this.lag = this.inputChannel.lag = this.channel.lag = lag
+}
+
+proto.localTick = function() {
+  var d = Date.now() - this.lastRemoteTick
+  return this.tickCount + d / this.tickRate
+}
+
+proto.createCharacter = function(x) {
+  var t = this.localTick()
+  var id = this.state.createParticle(null, x, [0,0], t)
+  this.channel.send("create", id, x, [0,0], t)
+  this.character = id
+}
+
+proto.setVelocity = function(v) {
+  var t = this.localTick()
+  var s = this.state.getParticle(this.character, t)
+
+  //only update velocity if necessary
+  var dx = v[0] - s.v[0]
+  var dy = v[1] - s.v[1]
+  if(dx * dx + dy * dy < 1e-6) {
+    return
+  }
+
+  //Set new velocity
+  var x = s.x
+  this.state.moveParticle(this.character, x, v, t)
+  this.channel.send("move", this.character, x, v, t)
+  if(v[0] * v[0] + v[1] * v[1] > 1e-6) {
+    this.lastVelocity = v.slice()
+  }
+}
+
+proto.shoot = function(vel) {
+  var t = this.localTick()
+  var v = [this.lastVelocity[0], this.lastVelocity[1]]
+  var vl = v[0] * v[0] + v[1] * v[1]
+  if(vl < 1e-6) {
+    v = [vel, 0]
+  } else {
+    vl = vel / Math.sqrt(vl)
+    v = [v[0] * vl, v[1] * vl]
+  }
+  var x = this.state.getParticle(this.character, t).x
+  var id = this.state.createParticle(null, x, v, t)
+  this.channel.send("create", id, x, v, t)
+  return id
+}
+},{"./trajectories.js":6}],13:[function(require,module,exports){
 var events = require('events');
 
 exports.isArray = isArray;
@@ -957,87 +1037,7 @@ exports.format = function(f) {
   return str;
 };
 
-},{"events":8}],5:[function(require,module,exports){
-"use strict"
-
-module.exports = Client
-
-var StateTrajectories = require("./trajectories.js")
-
-function Client(tickCount, tickRate, outChannel, inChannel) {
-  this.lag = inChannel.lag
-  this.tickCount = tickCount
-  this.lastRemoteTick = Date.now()
-  this.tickRate = tickRate
-  this.state = new StateTrajectories()
-  this.events = inChannel.events
-  this.channel = outChannel
-  this.inputChannel = inChannel
-  this.state.listen(this.events)
-  this.character = 0
-  this.lastVelocity = [1, 0]
-
-  var cl = this
-  this.events.on("tick", function(t) {
-    cl.tickCount = t
-    cl.lastRemoteTick = Date.now()
-  })
-}
-
-var proto = Client.prototype
-
-proto.setLag = function(lag) {
-  this.lag = this.inputChannel.lag = this.channel.lag = lag
-}
-
-proto.localTick = function() {
-  var d = Date.now() - this.lastRemoteTick
-  return this.tickCount + d / this.tickRate
-}
-
-proto.createCharacter = function(x) {
-  var t = this.localTick()
-  var id = this.state.createParticle(null, x, [0,0], t)
-  this.channel.send("create", id, x, [0,0], t)
-  this.character = id
-}
-
-proto.setVelocity = function(v) {
-  var t = this.localTick()
-  var s = this.state.getParticle(this.character, t)
-
-  //only update velocity if necessary
-  var dx = v[0] - s.v[0]
-  var dy = v[1] - s.v[1]
-  if(dx * dx + dy * dy < 1e-6) {
-    return
-  }
-
-  //Set new velocity
-  var x = s.x
-  this.state.moveParticle(this.character, x, v, t)
-  this.channel.send("move", this.character, x, v, t)
-  if(v[0] * v[0] + v[1] * v[1] > 1e-6) {
-    this.lastVelocity = v.slice()
-  }
-}
-
-proto.shoot = function(vel) {
-  var t = this.localTick()
-  var v = [this.lastVelocity[0], this.lastVelocity[1]]
-  var vl = v[0] * v[0] + v[1] * v[1]
-  if(vl < 1e-6) {
-    v = [vel, 0]
-  } else {
-    vl = vel / Math.sqrt(vl)
-    v = [v[0] * vl, v[1] * vl]
-  }
-  var x = this.state.getParticle(this.character, t).x
-  var id = this.state.createParticle(null, x, v, t)
-  this.channel.send("create", id, x, v, t)
-  return id
-}
-},{"./trajectories.js":6}],4:[function(require,module,exports){
+},{"events":8}],4:[function(require,module,exports){
 "use strict"
 
 var EventEmitter = require("events").EventEmitter
@@ -1754,7 +1754,7 @@ function createShell(options) {
 }
 
 module.exports = createShell
-},{"events":8,"util":13,"./lib/raf-polyfill.js":10,"./lib/mousewheel-polyfill.js":11,"./lib/hrtime-polyfill.js":12,"domready":14,"vkey":15,"invert-hash":16,"iota-array":17,"uniq":18,"binary-search-bounds":19}],3:[function(require,module,exports){
+},{"events":8,"util":13,"./lib/raf-polyfill.js":10,"./lib/mousewheel-polyfill.js":11,"./lib/hrtime-polyfill.js":12,"domready":14,"uniq":15,"invert-hash":16,"vkey":17,"binary-search-bounds":18,"iota-array":19}],3:[function(require,module,exports){
 "use strict"
 
 module.exports = drawState
@@ -1776,7 +1776,31 @@ function drawState(context, client, lpf) {
     context.fill()
   }
 }
-},{"hash-int":20,"pad":21}],14:[function(require,module,exports){
+},{"hash-int":20,"pad":21}],20:[function(require,module,exports){
+"use strict"
+
+var A
+if(typeof Uint32Array === undefined) {
+  A = [ 0 ]
+} else {
+  A = new Uint32Array(1)
+}
+
+function hashInt(x) {
+  A[0]  = x|0
+  A[0] -= (A[0]<<6)
+  A[0] ^= (A[0]>>>17)
+  A[0] -= (A[0]<<9)
+  A[0] ^= (A[0]<<4)
+  A[0] -= (A[0]<<3)
+  A[0] ^= (A[0]<<10)
+  A[0] ^= (A[0]>>>15)
+  return A[0]
+}
+
+module.exports = hashInt
+
+},{}],14:[function(require,module,exports){
 /*!
   * domready (c) Dustin Diaz 2012 - License MIT
   */
@@ -1832,6 +1856,78 @@ function drawState(context, client, lpf) {
     })
 })
 },{}],15:[function(require,module,exports){
+"use strict"
+
+function unique_pred(list, compare) {
+  var ptr = 1
+    , len = list.length
+    , a=list[0], b=list[0]
+  for(var i=1; i<len; ++i) {
+    b = a
+    a = list[i]
+    if(compare(a, b)) {
+      if(i === ptr) {
+        ptr++
+        continue
+      }
+      list[ptr++] = a
+    }
+  }
+  list.length = ptr
+  return list
+}
+
+function unique_eq(list) {
+  var ptr = 1
+    , len = list.length
+    , a=list[0], b = list[0]
+  for(var i=1; i<len; ++i, b=a) {
+    b = a
+    a = list[i]
+    if(a !== b) {
+      if(i === ptr) {
+        ptr++
+        continue
+      }
+      list[ptr++] = a
+    }
+  }
+  list.length = ptr
+  return list
+}
+
+function unique(list, compare, sorted) {
+  if(list.length === 0) {
+    return []
+  }
+  if(compare) {
+    if(!sorted) {
+      list.sort(compare)
+    }
+    return unique_pred(list, compare)
+  }
+  if(!sorted) {
+    list.sort()
+  }
+  return unique_eq(list)
+}
+
+module.exports = unique
+},{}],16:[function(require,module,exports){
+"use strict"
+
+function invert(hash) {
+  var result = {}
+  for(var i in hash) {
+    if(hash.hasOwnProperty(i)) {
+      result[hash[i]] = i
+    }
+  }
+  return result
+}
+
+module.exports = invert
+},{}],17:[function(require,module,exports){
 (function(){var ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
   , isOSX = /OS X/.test(ua)
   , isOpera = /Opera/.test(ua)
@@ -1970,91 +2066,7 @@ for(i = 112; i < 136; ++i) {
 }
 
 })()
-},{}],16:[function(require,module,exports){
-"use strict"
-
-function invert(hash) {
-  var result = {}
-  for(var i in hash) {
-    if(hash.hasOwnProperty(i)) {
-      result[hash[i]] = i
-    }
-  }
-  return result
-}
-
-module.exports = invert
-},{}],17:[function(require,module,exports){
-"use strict"
-
-function iota(n) {
-  var result = new Array(n)
-  for(var i=0; i<n; ++i) {
-    result[i] = i
-  }
-  return result
-}
-
-module.exports = iota
 },{}],18:[function(require,module,exports){
-"use strict"
-
-function unique_pred(list, compare) {
-  var ptr = 1
-    , len = list.length
-    , a=list[0], b=list[0]
-  for(var i=1; i<len; ++i) {
-    b = a
-    a = list[i]
-    if(compare(a, b)) {
-      if(i === ptr) {
-        ptr++
-        continue
-      }
-      list[ptr++] = a
-    }
-  }
-  list.length = ptr
-  return list
-}
-
-function unique_eq(list) {
-  var ptr = 1
-    , len = list.length
-    , a=list[0], b = list[0]
-  for(var i=1; i<len; ++i, b=a) {
-    b = a
-    a = list[i]
-    if(a !== b) {
-      if(i === ptr) {
-        ptr++
-        continue
-      }
-      list[ptr++] = a
-    }
-  }
-  list.length = ptr
-  return list
-}
-
-function unique(list, compare, sorted) {
-  if(list.length === 0) {
-    return []
-  }
-  if(compare) {
-    if(!sorted) {
-      list.sort(compare)
-    }
-    return unique_pred(list, compare)
-  }
-  if(!sorted) {
-    list.sort()
-  }
-  return unique_eq(list)
-}
-
-module.exports = unique
-},{}],19:[function(require,module,exports){
 "use strict"
 
 function compileSearch(funcName, predicate, reversed, extraArgs, useNdarray, earlyOut) {
@@ -2116,30 +2128,18 @@ module.exports = {
   eq: compileBoundsSearch("-", true, "EQ", true)
 }
 
-},{}],20:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 "use strict"
 
-var A
-if(typeof Uint32Array === undefined) {
-  A = [ 0 ]
-} else {
-  A = new Uint32Array(1)
+function iota(n) {
+  var result = new Array(n)
+  for(var i=0; i<n; ++i) {
+    result[i] = i
+  }
+  return result
 }
 
-function hashInt(x) {
-  A[0]  = x|0
-  A[0] -= (A[0]<<6)
-  A[0] ^= (A[0]>>>17)
-  A[0] -= (A[0]<<9)
-  A[0] ^= (A[0]<<4)
-  A[0] -= (A[0]<<3)
-  A[0] ^= (A[0]<<10)
-  A[0] ^= (A[0]>>>15)
-  return A[0]
-}
-
-module.exports = hashInt
-
+module.exports = iota
 },{}],6:[function(require,module,exports){
 "use strict"
 
